@@ -1,0 +1,147 @@
+---
+title: "Machine Learning Course Project"
+author: "Betty Matter"
+date: "7/15/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Machine Learning Course Project
+
+This project is to demonstrate the use of prediction models and execution of predictions using the learning from the machine learning course.  Throughout the coure many models were demonstrated.  Within this project the use of the gradient boost trees, random forest and decisions tree models is provided.  Additionally these models are used to perform prediction on a set of data.  These prediction models will be tested through use of a set aside data set.  The goal of this project is to determine the model that provides the best prediction  on a qualitative rating of exercise performance.This report will describe how the model was built, how cross validataion was employed, what the expected sample error is and why. 
+
+The source data for this project is derived from weareable fitness devices.  The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. 
+
+## Setup 
+```{r}
+library(caret)
+library(ggplot2)
+library(rpart)
+library(randomForest)
+library(gbm)
+library(lattice)
+library(kernlab)
+library(corrplot)
+library(rattle)
+```
+
+## Tidy Data
+There are many steps to ensure there data are ready to use with prediction models.  First read in the data and remove the NA values.  NA values are not acceptable when creating prediction models.  Next Remove the unecessary columns.  There are a number of initial columns in the data set that are just not applicable to the prediction.  These columns are removed.  After removing the NAs the data are ready for partioning.  This data are partioned with a 70/30 split.  70 percent of the data are used to build the model, 30 percent of the data are used to test the model.  These become our training and test data sets.  In the initial data load there was alos a validation data csv loaded.  These data are for validating the choosen model after completing model comparison and model cross validation and sample error analysis. 
+
+
+Read in Data
+
+```{r}
+train<-read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", header = TRUE)
+
+validation<-read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", header = TRUE)
+```
+
+Remove NAs
+
+```{r}
+tData<- train[,colSums(is.na(train))==0]
+vData<- validation[,colSums(is.na(validation))==0]
+```
+
+Remove unecessary columns
+
+```{r}
+tData<-tData[,-c(1:7)]
+VData<-vData[,-c(1:7)]
+```
+
+Partition the Data
+```{r}
+tpart<-createDataPartition(y=tData$classe, p=0.7, list = FALSE)
+trainData<-tData[tpart,]
+testData<- tData[-tpart,]
+```
+
+Change Type of Test Data to use in prediction
+```{r}
+testData$classe<-as.factor(testData$classe)
+```
+
+
+Remove Near Zeros
+```{r}
+nZVtD<-nearZeroVar(trainData)
+trainData<-trainData[,-nZVtD]
+testData<-testData[,-nZVtD]
+```
+##Create a controls
+
+```{r}
+##Create controls
+trControlRF <- trainControl(method="cv", number=3, verboseIter=FALSE)
+
+trControlGBM<-trainControl(method = "repeatedcv", number = 5, repeats = 1)
+```
+
+
+
+## Generalized Boosted Regression Model
+
+This model combines weak prediction models in an effort through this combination to increase the predction accuracy.
+
+```{r}
+modGBM <- train(classe~., data=trainData, method="gbm", trControl=trControlGBM, verbose = FALSE)
+```
+
+Prediction for GBM.
+
+```{r}
+predGBM <- predict(modGBM, testData)
+cnfmGBM <- confusionMatrix(predGBM, factor(testData$classe))
+cnfmGBM
+```
+
+##Decision Trees
+
+In this modeling type variables are split iteratively into groups. The plot for this model ends up being a interestig heirachical tree. 
+
+```{r}
+modTr <- train(classe~., data=trainData, method="rpart")
+fancyRpartPlot(modTr$finalModel)
+```
+
+Prediction for Decisions Trees.
+
+```{r}
+predTr <- predict(modTr, testData)
+cnfmTr <- confusionMatrix(predTr, factor(testData$classe))
+cnfmTr
+```
+
+
+## Random Forest
+
+In the randon forest model there are multiple trees that vote to result in the final prediction. This model uses the parrallel random forest method. 
+
+```{r}
+modRF <- train(classe~., data=trainData, method="parRF", trControl=trControlRF)
+```
+
+Prediction for Random Forests
+
+
+```{r}
+predictRF <- predict(modRF, newdata=testData)
+cnfmrf <- confusionMatrix(predictRF, testData$classe)
+cnfmrf
+```
+
+##Comparison
+
+When comparing the models if we look at model accuracy we will find the accuracy of the GBM model is .97, the accuracy of decision trees is only .49 and lastly the accuracy of random forest is .99.  Random forest beats out gbm model for accuracy by .2, and decision trees is not even within range of these two.  Clearly random forest is the best model.  
+
+The random forest model is used with the validation data to provide the final prediction.
+
+```{r}
+final<-predict(modRF, newdata=vData)
+final 
+```
